@@ -2,6 +2,7 @@ package com.example.yourhour
 
 import android.app.AppOpsManager
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.CalendarMonth
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import androidx.compose.foundation.clickable
@@ -84,6 +85,11 @@ fun YourHourApp() {
         if (hasPermission) {
             appUsageList = getUsageStats(context)
         }
+    }
+    // Vacation Notice Service start করো
+    LaunchedEffect(Unit) {
+        val serviceIntent = Intent(context, VacationNoticeService::class.java)
+        context.startForegroundService(serviceIntent)
     }
 
     if (!hasPermission) {
@@ -183,76 +189,367 @@ fun HomeScreen(appUsageList: List<AppUsageInfo>) {
     val totalTime = appUsageList.sumOf { it.usageTime }
     val top3 = appUsageList.take(3)
     val context = LocalContext.current
-    val motivationalQuotes = listOf(
-        "Time is your real wealth.",
-        "Every scroll costs your future.",
-        "Focus builds dreams.",
-        "You will never get today back.",
-        "Discipline creates freedom.",
-        "Small habits shape your life."
-    )
-    val randomQuote =
-        motivationalQuotes.random()
+
+    val weeklyData = remember { getWeeklyUsage(context) }
+    val avgHours = if (weeklyData.isNotEmpty())
+        weeklyData.map { it.second }.average().toFloat() else 0f
+    val todayHours = TimeUnit.MILLISECONDS.toHours(totalTime).toFloat()
+    val isAboveAverage = todayHours > avgHours
+
+    val darkBg = androidx.compose.ui.graphics.Color(0xFF0F0F1A)
+    val cardBg = androidx.compose.ui.graphics.Color(0xFF1A1A2E)
+    val accentPurple = androidx.compose.ui.graphics.Color(0xFF7C5CBF)
+    val accentRed = androidx.compose.ui.graphics.Color(0xFFE53935)
+
+    var selectedDayIndex by remember { mutableStateOf(weeklyData.size - 1) }
+    var selectedDayHours by remember { mutableStateOf(todayHours) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("YourHour", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        "YourHour",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp,
+                        color = accentPurple
+                    )
+                },
+                actions = {
+                    IconButton(onClick = {}) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = "Notifications",
+                            tint = androidx.compose.ui.graphics.Color.White
+                        )
+                    }
+                    IconButton(onClick = {}) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = androidx.compose.ui.graphics.Color.White
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = darkBg
                 )
             )
-        }
+        },
+        containerColor = darkBg
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
+                    colors = CardDefaults.cardColors(containerColor = cardBg),
+                    shape = RoundedCornerShape(20.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("Today's Screen Time", fontSize = 14.sp)
-                        Spacer(modifier = Modifier.height(4.dp))
+                    Column(modifier = Modifier.padding(20.dp)) {
                         Text(
-                            formatTime(totalTime),
-                            fontSize = 40.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            "TODAY'S SCREEN TIME",
+                            fontSize = 11.sp,
+                            letterSpacing = 2.sp,
+                            color = androidx.compose.ui.graphics.Color.Gray
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            val hours = TimeUnit.MILLISECONDS.toHours(totalTime)
+                            val minutes = TimeUnit.MILLISECONDS.toMinutes(totalTime) % 60
+                            Text(
+                                "${hours}h",
+                                fontSize = 52.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = androidx.compose.ui.graphics.Color.White
+                            )
+                            Text(
+                                " ${minutes}m",
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = androidx.compose.ui.graphics.Color.White,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                        }
                         Text(
-                            "You will never have this day again.",
+                            "\"You will never have this day again.\"",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = androidx.compose.ui.graphics.Color.Gray,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                         )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (avgHours > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (isAboveAverage)
+                                            accentRed.copy(alpha = 0.2f)
+                                        else
+                                            accentPurple.copy(alpha = 0.2f),
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    if (isAboveAverage)
+                                        "⚠️ Above daily average · ${avgHours.toInt()}h avg"
+                                    else
+                                        "✅ Below daily average · ${avgHours.toInt()}h avg",
+                                    fontSize = 11.sp,
+                                    color = if (isAboveAverage) accentRed else accentPurple
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+
+                        // Selected day info
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = accentPurple.copy(alpha = 0.15f)
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp).fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    weeklyData.getOrNull(selectedDayIndex)?.first ?: "Today",
+                                    fontSize = 13.sp,
+                                    color = androidx.compose.ui.graphics.Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "${selectedDayHours.toInt()}h " +
+                                            "${((selectedDayHours % 1) * 60).toInt()}m",
+                                    fontSize = 13.sp,
+                                    color = accentPurple,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Weekly bars
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            val days = listOf("S", "M", "T", "W", "T", "F", "S")
+                            val maxHours = weeklyData.maxOfOrNull { it.second } ?: 1f
+                            weeklyData.takeLast(7).forEachIndexed { index, pair ->
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Bottom,
+                                    modifier = Modifier.clickable {
+                                        selectedDayIndex = index
+                                        selectedDayHours = pair.second
+                                    }
+                                ) {
+                                    if (selectedDayIndex == index) {
+                                        Text(
+                                            "${pair.second.toInt()}h",
+                                            fontSize = 9.sp,
+                                            color = accentPurple
+                                        )
+                                    } else {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    val barHeight = ((pair.second / maxHours) * 48).dp
+                                    val isSelected = selectedDayIndex == index
+                                    val isToday = index == weeklyData.size - 1
+                                    Box(
+                                        modifier = Modifier
+                                            .width(28.dp)
+                                            .height(barHeight.coerceAtLeast(4.dp))
+                                            .background(
+                                                when {
+                                                    isSelected -> accentPurple
+                                                    isToday -> accentRed
+                                                    else -> accentPurple.copy(alpha = 0.4f)
+                                                },
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        days[index],
+                                        fontSize = 10.sp,
+                                        color = when {
+                                            isSelected -> accentPurple
+                                            isToday -> androidx.compose.ui.graphics.Color.White
+                                            else -> androidx.compose.ui.graphics.Color.Gray
+                                        },
+                                        fontWeight = if (isSelected) FontWeight.Bold
+                                        else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-
             item {
-                Text("Top Apps Today", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "🏆 Top Apps Today",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = androidx.compose.ui.graphics.Color.White
+                    )
+                    Text("See all →", fontSize = 13.sp, color = accentPurple)
+                }
             }
 
             items(top3) { app ->
-                AppUsageCard(app = app, totalTime = totalTime)
+                DarkAppCard(
+                    app = app,
+                    totalTime = totalTime,
+                    cardBg = cardBg,
+                    accentPurple = accentPurple
+                )
             }
 
             item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("All Apps", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "📱 All Apps",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = androidx.compose.ui.graphics.Color.White
+                    )
+                    Text("View all →", fontSize = 13.sp, color = accentPurple)
+                }
             }
 
             items(appUsageList.drop(3)) { app ->
-                AppUsageCard(app = app, totalTime = totalTime)
+                DarkAppCard(
+                    app = app,
+                    totalTime = totalTime,
+                    cardBg = cardBg,
+                    accentPurple = accentPurple
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DarkAppCard(
+    app: AppUsageInfo,
+    totalTime: Long,
+    cardBg: androidx.compose.ui.graphics.Color,
+    accentPurple: androidx.compose.ui.graphics.Color
+) {
+    val percentage = if (totalTime > 0) (app.usageTime.toFloat() / totalTime) else 0f
+    val context = LocalContext.current
+
+    // Color based on usage
+    val barColor = when {
+        percentage > 0.4f -> androidx.compose.ui.graphics.Color(0xFFE53935)
+        percentage > 0.2f -> androidx.compose.ui.graphics.Color(0xFFFF9800)
+        else -> accentPurple
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left color bar
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(40.dp)
+                    .background(barColor, RoundedCornerShape(2.dp))
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // App icon
+            val icon = remember(app.packageName) {
+                try {
+                    context.packageManager.getApplicationIcon(app.packageName)
+                } catch (e: Exception) { null }
+            }
+            if (icon != null) {
+                Image(
+                    bitmap = icon.toBitmap(48, 48).asImageBitmap(),
+                    contentDescription = app.appName,
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(
+                            accentPurple.copy(alpha = 0.3f),
+                            RoundedCornerShape(10.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        app.appName.take(1),
+                        fontWeight = FontWeight.Bold,
+                        color = androidx.compose.ui.graphics.Color.White
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        app.appName,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = androidx.compose.ui.graphics.Color.White,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        formatTime(app.usageTime),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = barColor
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { percentage },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = barColor,
+                    trackColor = androidx.compose.ui.graphics.Color(0xFF2A2A4A)
+                )
             }
         }
     }
@@ -328,181 +625,378 @@ fun StatsScreen(appUsageList: List<AppUsageInfo>, context: Context) {
     val weeklyData = getWeeklyUsage(context)
     val monthlyData = getMonthlyUsage(context)
     val goalManager = remember { GoalManager(context) }
-
     var goalHours by remember { mutableStateOf(4L) }
 
     LaunchedEffect(Unit) {
-        goalManager.dailyGoalFlow.collect {
-            goalHours = it
-        }
+        goalManager.dailyGoalFlow.collect { goalHours = it }
     }
 
     val totalTime = appUsageList.sumOf { it.usageTime }
     val mostUsedApp = appUsageList.firstOrNull()
-
     val yearlyMillis = getYearlyUsage(context)
     val yearlyHours = TimeUnit.MILLISECONDS.toHours(yearlyMillis)
     val yearlyDays = yearlyHours / 24
     val remainingHours = yearlyHours % 24
+
+    val darkBg = androidx.compose.ui.graphics.Color(0xFF0F0F1A)
+    val cardBg = androidx.compose.ui.graphics.Color(0xFF1A1A2E)
+    val accentPurple = androidx.compose.ui.graphics.Color(0xFF7C5CBF)
+    val accentRed = androidx.compose.ui.graphics.Color(0xFFE53935)
+    val accentGreen = androidx.compose.ui.graphics.Color(0xFF4CAF50)
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Statistics", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        "Statistics",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp,
+                        color = androidx.compose.ui.graphics.Color.White
+                    )
+                },
+                actions = {
+                    // Calendar icon
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 16.dp)
+                            .size(36.dp)
+                            .background(
+                                accentPurple.copy(alpha = 0.2f),
+                                RoundedCornerShape(8.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.CalendarMonth,
+                            contentDescription = "Calendar",
+                            tint = accentPurple,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = darkBg
                 )
             )
-        }
+        },
+        containerColor = darkBg
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Today summary
+
+            // Today Summary Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
+                    colors = CardDefaults.cardColors(containerColor = cardBg),
+                    shape = RoundedCornerShape(20.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Today's Summary", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            "TODAY'S SUMMARY",
+                            fontSize = 10.sp,
+                            letterSpacing = 2.sp,
+                            color = androidx.compose.ui.graphics.Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Total Time", fontSize = 12.sp)
-                                Text(formatTime(totalTime), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Most Used", fontSize = 12.sp)
+                            // Total time
+                            Column {
                                 Text(
-                                    mostUsedApp?.appName?.take(12) ?: "N/A",
+                                    "Total Time",
+                                    fontSize = 11.sp,
+                                    color = androidx.compose.ui.graphics.Color.Gray
+                                )
+                                Text(
+                                    formatTime(totalTime),
+                                    fontSize = 24.sp,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
+                                    color = androidx.compose.ui.graphics.Color.White
                                 )
                             }
+                            // Most used
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Apps Used", fontSize = 12.sp)
-                                Text("${appUsageList.size}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text(
+                                    "Most Used",
+                                    fontSize = 11.sp,
+                                    color = androidx.compose.ui.graphics.Color.Gray
+                                )
+                                Text(
+                                    mostUsedApp?.appName?.take(10) ?: "N/A",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = accentPurple
+                                )
+                            }
+                            // Apps used
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    "Apps Used",
+                                    fontSize = 11.sp,
+                                    color = androidx.compose.ui.graphics.Color.Gray
+                                )
+                                Text(
+                                    "${appUsageList.size}",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = androidx.compose.ui.graphics.Color.White
+                                )
+                            }
+                        }
+
+                        // Goal exceeded warning
+                        if (TimeUnit.MILLISECONDS.toHours(totalTime) > goalHours) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        accentRed.copy(alpha = 0.15f),
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    "⚠️ Daily goal exceeded! Goal: ${goalHours}h",
+                                    fontSize = 12.sp,
+                                    color = accentRed
+                                )
                             }
                         }
                     }
                 }
             }
 
-            if (TimeUnit.MILLISECONDS.toHours(totalTime) > goalHours) {
-
-                item {
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-
-                        Column(
-                            modifier = Modifier.padding(16.dp)
+            // Weekly Chart
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = cardBg),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("🗓️", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "This Week",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = androidx.compose.ui.graphics.Color.White
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        DarkBarChart(
+                            data = weeklyData,
+                            accentPurple = accentPurple,
+                            accentRed = accentRed
+                        )
+                    }
+                }
+            }
 
+            // Monthly Chart
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = cardBg),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🗓️", fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "⚠️ Goal Exceeded",
+                                "This Month",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            Text(
-                                "You spent more time than your daily goal today.",
-                                fontSize = 14.sp
+                                fontSize = 16.sp,
+                                color = androidx.compose.ui.graphics.Color.White
                             )
                         }
-                    }
-                }
-            }
-
-            // Weekly chart
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("This Week", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        WeeklyBarChart(weeklyData)
-                    }
-                }
-            }
-
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-
-                    Column(modifier = Modifier.padding(16.dp)) {
-
-                        Text(
-                            "This Month",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                        Spacer(modifier = Modifier.height(12.dp))
+                        DarkBarChart(
+                            data = monthlyData,
+                            accentPurple = accentPurple,
+                            accentRed = accentRed
                         )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        WeeklyBarChart(monthlyData)
                     }
                 }
             }
 
-
-
-            // Yearly summary
+            // Yearly Summary
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
+                        containerColor = accentPurple.copy(alpha = 0.15f)
+                    ),
+                    shape = RoundedCornerShape(20.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("📅 This Year", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("📅", fontSize = 20.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "This Year",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = androidx.compose.ui.graphics.Color.White
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            "You spent ",
+                            fontSize = 15.sp,
+                            color = androidx.compose.ui.graphics.Color.Gray
+                        )
+                        Row {
+                            Text(
+                                "$yearlyDays days & $remainingHours hours",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = accentPurple
+                            )
+                            Text(
+                                " on your phone!",
+                                fontSize = 15.sp,
+                                color = androidx.compose.ui.graphics.Color.Gray
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "You spent $yearlyDays days & $remainingHours hours on your phone this year!",
-                            fontSize = 15.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "Total: ${yearlyHours} hours",
+                            "Total: $yearlyHours hours",
                             fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = androidx.compose.ui.graphics.Color.Gray
                         )
                     }
                 }
             }
 
-            // Morning/Afternoon/Evening breakdown
+            // Today's Breakdown
             item {
                 val breakdown = getDayBreakdown(context)
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Today's Breakdown", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Spacer(modifier = Modifier.height(12.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = cardBg),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            "Today's Breakdown",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = androidx.compose.ui.graphics.Color.White
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            BreakdownItem("🌅 Morning", breakdown[0])
-                            BreakdownItem("☀️ Afternoon", breakdown[1])
-                            BreakdownItem("🌙 Evening", breakdown[2])
+                            DarkBreakdownItem(
+                                "🌅", "Morning",
+                                breakdown[0], accentPurple
+                            )
+                            DarkBreakdownItem(
+                                "☀️", "Afternoon",
+                                breakdown[1], accentRed
+                            )
+                            DarkBreakdownItem(
+                                "🌙", "Evening",
+                                breakdown[2], accentGreen
+                            )
                         }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+fun DarkBreakdownItem(
+    emoji: String,
+    label: String,
+    millis: Long,
+    color: androidx.compose.ui.graphics.Color
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(emoji, fontSize = 24.sp)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            label,
+            fontSize = 11.sp,
+            color = androidx.compose.ui.graphics.Color.Gray
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            formatTime(millis),
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            color = color
+        )
+    }
+}
+
+@Composable
+fun DarkBarChart(
+    data: List<Pair<String, Float>>,
+    accentPurple: androidx.compose.ui.graphics.Color,
+    accentRed: androidx.compose.ui.graphics.Color
+) {
+    AndroidView(
+        factory = { context ->
+            BarChart(context).apply {
+                val entries = data.mapIndexed { index, pair ->
+                    BarEntry(index.toFloat(), pair.second)
+                }
+                val dataSet = BarDataSet(entries, "Hours").apply {
+                    color = android.graphics.Color.parseColor("#7C5CBF")
+                    valueTextColor = android.graphics.Color.WHITE
+                    valueTextSize = 9f
+                    highLightColor = android.graphics.Color.parseColor("#E53935")
+                }
+                this.data = BarData(dataSet)
+                xAxis.apply {
+                    valueFormatter = IndexAxisValueFormatter(data.map { it.first })
+                    position = XAxis.XAxisPosition.BOTTOM
+                    granularity = 1f
+                    textColor = android.graphics.Color.GRAY
+                    setDrawGridLines(false)
+                    textSize = 9f
+                }
+                axisLeft.apply {
+                    textColor = android.graphics.Color.GRAY
+                    setDrawGridLines(true)
+                    gridColor = android.graphics.Color.parseColor("#2A2A4A")
+                    textSize = 9f
+                }
+                axisRight.isEnabled = false
+                legend.isEnabled = false
+                description.isEnabled = false
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                setDrawBorders(false)
+                animateY(800)
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+    )
 }
 
 
@@ -1472,6 +1966,23 @@ fun FocusScreen() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LifeScreen() {
+    val context = LocalContext.current
+    val todoManager = remember { TodoManager(context) }
+    val scope = rememberCoroutineScope()
+
+    var todos by remember { mutableStateOf<List<TodoItem>>(emptyList()) }
+    var showAddTodo by remember { mutableStateOf(false) }
+    var todoInput by remember { mutableStateOf("") }
+
+    // Time picker states
+    var selectedHour by remember { mutableStateOf(8) }
+    var selectedMinute by remember { mutableStateOf(0) }
+    var selectedAmPm by remember { mutableStateOf("AM") }
+
+    LaunchedEffect(Unit) {
+        todoManager.todosFlow.collect { todos = it }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -1483,16 +1994,451 @@ fun LifeScreen() {
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("📝", fontSize = 48.sp)
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("Life Coming Soon!", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("Journal, Todo & Quran", fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            // ─── QURAN SECTION ───
+            item {
+                val quranManager = remember { HabitManager(context) }
+                var quranPages by remember { mutableStateOf(0) }
+                var alreadyReadToday by remember { mutableStateOf(false) }
+                var quranStreak by remember { mutableStateOf(0) }
+
+                LaunchedEffect(Unit) {
+                    quranManager.getHabitFlow("quran_read_today").collect {
+                        alreadyReadToday = it
+                    }
+                }
+                LaunchedEffect(Unit) {
+                    quranManager.getStreakFlow("quran_read_today").collect {
+                        quranStreak = it
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "📿 Quran Tracker",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            "Track your daily Quran reading",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    "$quranPages pages",
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (alreadyReadToday)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    "🔥 $quranStreak day streak",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (alreadyReadToday) {
+                                    Text(
+                                        "✅ Counted for today!",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { if (quranPages > 0) quranPages-- },
+                                        modifier = Modifier.size(36.dp),
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("-", fontSize = 16.sp)
+                                    }
+                                    Button(
+                                        onClick = { quranPages++ },
+                                        modifier = Modifier.size(36.dp),
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("+", fontSize = 16.sp)
+                                    }
+                                }
+                                // ছোট Done button
+                                Button(
+                                    onClick = {
+                                        if (!alreadyReadToday && quranPages > 0) {
+                                            scope.launch {
+                                                quranManager.markHabitDone("quran_read_today")
+                                                quranManager.incrementStreak(
+                                                    "quran_read_today",
+                                                    quranStreak
+                                                )
+                                            }
+                                        }
+                                    },
+                                    enabled = !alreadyReadToday && quranPages > 0,
+                                    contentPadding = PaddingValues(
+                                        horizontal = 10.dp,
+                                        vertical = 4.dp
+                                    ),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Text(
+                                        if (alreadyReadToday) "Done ✅" else "Mark Read",
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ─── TODO SECTION ───
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "✅ Todo & Reminders",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                    Button(
+                        onClick = { showAddTodo = true },
+                        contentPadding = PaddingValues(
+                            horizontal = 12.dp,
+                            vertical = 6.dp
+                        )
+                    ) {
+                        Text("+ Add Task")
+                    }
+                }
+            }
+
+            if (todos.isEmpty()) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(24.dp).fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("📋", fontSize = 32.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "No tasks yet!",
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            items(todos) { todo ->
+                TodoCard(
+                    todo = todo,
+                    onDone = { scope.launch { todoManager.markDone(todo.id) } },
+                    onDelete = { scope.launch { todoManager.deleteTodo(todo.id) } }
+                )
+            }
+
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+        }
+    }
+
+    // ─── ADD TODO DIALOG ───
+    if (showAddTodo) {
+        AlertDialog(
+            onDismissRequest = { showAddTodo = false },
+            title = { Text("Add New Task") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Task title
+                    OutlinedTextField(
+                        value = todoInput,
+                        onValueChange = { todoInput = it },
+                        label = { Text("Task title") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Text(
+                        "Set Reminder Time:",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+
+                    // Hour / Minute / AM-PM picker
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Hour
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Hour", fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = {
+                                    selectedHour = if (selectedHour <= 1) 12
+                                    else selectedHour - 1
+                                }) {
+                                    Text("▼", fontSize = 14.sp)
+                                }
+                                Text(
+                                    String.format("%02d", selectedHour),
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                IconButton(onClick = {
+                                    selectedHour = if (selectedHour >= 12) 1
+                                    else selectedHour + 1
+                                }) {
+                                    Text("▲", fontSize = 14.sp)
+                                }
+                            }
+                        }
+
+                        Text(":", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+
+                        // Minute
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Min", fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = {
+                                    selectedMinute = if (selectedMinute <= 0) 55
+                                    else selectedMinute - 5
+                                }) {
+                                    Text("▼", fontSize = 14.sp)
+                                }
+                                Text(
+                                    String.format("%02d", selectedMinute),
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                IconButton(onClick = {
+                                    selectedMinute = if (selectedMinute >= 55) 0
+                                    else selectedMinute + 5
+                                }) {
+                                    Text("▲", fontSize = 14.sp)
+                                }
+                            }
+                        }
+
+                        // AM/PM
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("AM/PM", fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Button(
+                                onClick = {
+                                    selectedAmPm = if (selectedAmPm == "AM") "PM" else "AM"
+                                },
+                                contentPadding = PaddingValues(
+                                    horizontal = 8.dp, vertical = 4.dp
+                                )
+                            ) {
+                                Text(selectedAmPm, fontSize = 16.sp)
+                            }
+                        }
+                    }
+
+                    // Preview
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                "⏰ Reminder at: " +
+                                        "${String.format("%02d", selectedHour)}:" +
+                                        "${String.format("%02d", selectedMinute)} $selectedAmPm",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (todoInput.isNotBlank()) {
+                            val timeStr = "${String.format("%02d", selectedHour)}:" +
+                                    "${String.format("%02d", selectedMinute)} $selectedAmPm"
+                            scope.launch {
+                                todoManager.addTodo(todoInput, timeStr)
+                            }
+                            // Schedule notification
+                            scheduleReminder(context, todoInput, selectedHour,
+                                selectedMinute, selectedAmPm)
+                            todoInput = ""
+                            showAddTodo = false
+                        }
+                    }
+                ) {
+                    Text("Add Task")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddTodo = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+fun scheduleReminder(
+    context: Context,
+    title: String,
+    hour: Int,
+    minute: Int,
+    amPm: String
+) {
+    val alarmManager = context.getSystemService(Context.ALARM_SERVICE)
+            as android.app.AlarmManager
+    val intent = android.content.Intent(context, ReminderReceiver::class.java).apply {
+        putExtra("title", title)
+    }
+    val pendingIntent = android.app.PendingIntent.getBroadcast(
+        context,
+        System.currentTimeMillis().toInt(),
+        intent,
+        android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                android.app.PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val calendar = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR, hour)
+        set(java.util.Calendar.MINUTE, minute)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.AM_PM,
+            if (amPm == "AM") java.util.Calendar.AM else java.util.Calendar.PM)
+        // যদি time আগে হয়ে গেছে তাহলে পরের দিন
+        if (timeInMillis < System.currentTimeMillis()) {
+            add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+    }
+
+    try {
+        alarmManager.setExactAndAllowWhileIdle(
+            android.app.AlarmManager.RTC_WAKEUP,
+            calendar.timeInMillis,
+            pendingIntent
+        )
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+@Composable
+fun TodoCard(
+    todo: TodoItem,
+    onDone: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (todo.isDone)
+                MaterialTheme.colorScheme.surfaceVariant
+            else
+                MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    todo.title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    style = androidx.compose.ui.text.TextStyle(
+                        textDecoration = if (todo.isDone)
+                            androidx.compose.ui.text.style.TextDecoration.LineThrough
+                        else
+                            androidx.compose.ui.text.style.TextDecoration.None,
+                        fontSize = 15.sp
+                    ),
+                    color = if (todo.isDone)
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    else
+                        MaterialTheme.colorScheme.onSurface
+                )
+                if (todo.reminderTime.isNotBlank()) {
+                    Text(
+                        "⏰ ${todo.reminderTime}",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            Row {
+                if (!todo.isDone) {
+                    IconButton(onClick = onDone) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = "Done",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
         }
     }
 }
