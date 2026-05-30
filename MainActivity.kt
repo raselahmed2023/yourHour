@@ -741,14 +741,37 @@ fun HabitsScreen() {
                 }
             }
 
-            // Prayer Tracker
+            // Prayer Tracker with progress bar
             item {
+                // Count how many prayers are done
+                val prayerDoneStates = prayers.map { prayer ->
+                    produceState(initialValue = false, prayer) {
+                        habitManager.getHabitFlow("prayer_$prayer").collect { value = it }
+                    }
+                }
+                val prayerDoneCount = prayerDoneStates.count { it.value }
+                val prayerProgress  = prayerDoneCount / prayers.size.toFloat()
+
                 Card(modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = cardBg),
                     shape = RoundedCornerShape(16.dp)) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("🕌 Prayer Tracker", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
-                        Text("Did you pray today?", fontSize = 12.sp, color = Color.Gray)
+                        Row(modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("🕌 Prayer Tracker", fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp, color = Color.White)
+                            Text("$prayerDoneCount / ${prayers.size}",
+                                fontSize = 12.sp, fontWeight = FontWeight.Bold, color = goldColor)
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        // Prayer progress bar
+                        LinearProgressIndicator(
+                            progress = { prayerProgress },
+                            modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
+                            color = goldColor,
+                            trackColor = Color(0xFF2A2A4A)
+                        )
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                             prayers.forEach { prayer -> PrayerItemGold(prayer, habitManager, goldColor) }
@@ -865,6 +888,15 @@ fun LuxuryHabitCard(emoji: String, habitName: String, habitKey: String,
                         .padding(horizontal = 8.dp, vertical = 2.dp)) {
                         Text("🔥 $streak day streak", fontSize = 11.sp, color = goldColor)
                     }
+                    Spacer(modifier = Modifier.height(5.dp))
+                    // Streak progress bar (max 30 days target)
+                    val streakProgress = (streak / 30f).coerceIn(0f, 1f)
+                    LinearProgressIndicator(
+                        progress = { streakProgress },
+                        modifier = Modifier.width(120.dp).height(3.dp).clip(RoundedCornerShape(2.dp)),
+                        color = if (isDone) Color(0xFF4CAF50) else goldColor.copy(alpha = 0.5f),
+                        trackColor = Color(0xFF2A2A4A)
+                    )
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1185,14 +1217,12 @@ fun AppLimitRowNew(app: AppUsageInfo, limitManager: AppLimitManager, context: Co
 @Composable
 fun FocusScreen() {
     val darkBg    = Color(0xFF090A12)
-    val cardBg    = Color(0xFF0F1120)
     val accentRed = Color(0xFFEF4444)
     val accentOrg = Color(0xFFFB923C)
     val textDim   = Color(0xFFC8CCDC)
 
     var isSessionView by remember { mutableStateOf(true) }
     var isWorkSession by remember { mutableStateOf(true) }
-    var sessionCount  by remember { mutableStateOf(0) }
     var isRunning     by remember { mutableStateOf(false) }
 
     val workTime   = 25 * 60
@@ -1201,6 +1231,7 @@ fun FocusScreen() {
 
     var totalTime   by remember { mutableStateOf(workTime) }
     var currentTime by remember { mutableStateOf(workTime) }
+    var sessionCount by remember { mutableStateOf(0) }
 
     LaunchedEffect(isRunning) {
         while (isRunning && currentTime > 0) { delay(1000); currentTime-- }
@@ -1214,14 +1245,13 @@ fun FocusScreen() {
         }
     }
 
-    val progress = currentTime.toFloat() / totalTime.toFloat()
-    val minutes  = currentTime / 60
-    val seconds  = currentTime % 60
+    val minutes = currentTime / 60
+    val seconds = currentTime % 60
 
-    // FIX: Flip animation via rotationY
+    // Flip animation
     val flipRotation by animateFloatAsState(
         targetValue = if (isSessionView) 0f else 180f,
-        animationSpec = tween(500, easing = FastOutSlowInEasing),
+        animationSpec = tween(600, easing = FastOutSlowInEasing),
         label = "flip"
     )
     val isFront = flipRotation <= 90f
@@ -1241,212 +1271,203 @@ fun FocusScreen() {
         },
         containerColor = darkBg
     ) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp),
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Spacer(modifier = Modifier.height(4.dp))
 
-            // Toggle
-            item {
-                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF111320))
-                    .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(20.dp))) {
-                    listOf("🍅 Session" to true, "🌀 Idle View" to false).forEach { (label, isSession) ->
-                        Box(modifier = Modifier.weight(1f).padding(3.dp).clip(RoundedCornerShape(18.dp))
-                            .background(if (isSessionView == isSession)
-                                Brush.linearGradient(listOf(accentRed, Color(0xFFDC2626)))
-                            else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)))
-                            .clickable { isSessionView = isSession }
-                            .padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                            Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                                color = if (isSessionView == isSession) Color.White else textDim.copy(alpha = 0.4f))
-                        }
+            // ── Toggle ──
+            Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF111320))
+                .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(20.dp))) {
+                listOf("🍅 Session" to true, "🌀 Idle View" to false).forEach { (label, isSession) ->
+                    Box(modifier = Modifier.weight(1f).padding(3.dp).clip(RoundedCornerShape(18.dp))
+                        .background(if (isSessionView == isSession)
+                            Brush.linearGradient(listOf(accentRed, Color(0xFFDC2626)))
+                        else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)))
+                        .clickable { isSessionView = isSession }
+                        .padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            color = if (isSessionView == isSession) Color.White else textDim.copy(alpha = 0.4f))
                     }
                 }
             }
 
-            // FIX: Flip card
-            item {
-                Box(modifier = Modifier.fillMaxWidth().graphicsLayer {
-                    rotationY = flipRotation
-                    cameraDistance = 12f * density
-                }, contentAlignment = Alignment.Center) {
+            // ── Flip Card ──
+            Box(modifier = Modifier.fillMaxWidth().weight(1f).graphicsLayer {
+                rotationY = flipRotation
+                cameraDistance = 12f * density
+            }, contentAlignment = Alignment.Center) {
 
-                    if (isFront) {
-                        // FRONT — Session view
-                        Column(modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (isFront) {
+                    // FRONT — Flip Clock Session
+                    Column(horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxSize()) {
 
-                            Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                                .background(Brush.linearGradient(
-                                    listOf(Color(0xFF1E1535), Color(0xFF141228), Color(0xFF100E1F))))
-                                .border(1.dp, accentRed.copy(alpha = 0.22f), RoundedCornerShape(18.dp))
-                                .padding(horizontal = 16.dp, vertical = 11.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(if (isWorkSession) "🍅" else "☕", fontSize = 20.sp)
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(if (isWorkSession) "Work Session" else "Break Time",
-                                            fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
-                                            color = Color(0xFFFCA5A5))
-                                        Text("Session #${sessionCount + 1} · Pomodoro",
-                                            fontSize = 9.sp, color = Color(0xFFFCA5A5).copy(alpha = 0.4f))
-                                    }
-                                }
-                            }
+                        Text(
+                            if (isWorkSession) "FOCUS" else "BREAK",
+                            fontSize = 11.sp, letterSpacing = 4.sp,
+                            color = accentRed.copy(alpha = 0.6f),
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                            Box(contentAlignment = Alignment.Center,
-                                modifier = Modifier.size(172.dp).padding(vertical = 6.dp)) {
-                                Box(modifier = Modifier.size(172.dp).drawBehind {
-                                    drawCircle(color = accentRed.copy(alpha = 0.08f),
-                                        radius = size.minDimension / 2 - 4.dp.toPx(),
-                                        style = Stroke(8.dp.toPx(), cap = StrokeCap.Round))
-                                    drawArc(brush = Brush.linearGradient(listOf(accentRed, accentOrg)),
-                                        startAngle = -90f, sweepAngle = 360f * progress, useCenter = false,
-                                        topLeft = Offset(4.dp.toPx(), 4.dp.toPx()),
-                                        size = Size(size.width - 8.dp.toPx(), size.height - 8.dp.toPx()),
-                                        style = Stroke(8.dp.toPx(), cap = StrokeCap.Round))
-                                }, contentAlignment = Alignment.Center) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally,
-                                        modifier = Modifier.size(144.dp).clip(CircleShape)
-                                            .background(Brush.radialGradient(
-                                                listOf(Color(0xFF0F1020), Color(0xFF0B0C14)))),
-                                        verticalArrangement = Arrangement.Center) {
-                                        Text(String.format("%02d:%02d", minutes, seconds),
-                                            fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
-                                            color = Color.White, letterSpacing = (-1).sp)
-                                        Text(if (isWorkSession) "FOCUS" else "REST",
-                                            fontSize = 9.sp, color = Color(0xFFFCA5A5).copy(alpha = 0.45f),
-                                            letterSpacing = 2.sp)
-                                    }
-                                }
-                            }
+                        // Flip clock digits
+                        FlipClock(minutes = minutes, seconds = seconds, accentRed = accentRed)
+                    }
+                } else {
+                    // BACK — Idle flip clock showing current time
+                    Column(horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }) {
 
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                repeat(4) { i ->
-                                    Box(modifier = Modifier.size(9.dp).clip(CircleShape)
-                                        .background(when {
-                                            i < sessionCount % 4 -> accentRed.copy(alpha = 0.7f)
-                                            i == sessionCount % 4 -> accentRed.copy(alpha = 0.2f)
-                                            else -> accentRed.copy(alpha = 0.12f)
-                                        })
-                                        .border(1.5.dp, when {
-                                            i < sessionCount % 4 -> Color.Transparent
-                                            i == sessionCount % 4 -> accentRed.copy(alpha = 0.6f)
-                                            else -> accentRed.copy(alpha = 0.2f)
-                                        }, CircleShape))
-                                }
+                        // Current real time with seconds
+                        val currentH = remember { mutableStateOf("00") }
+                        val currentM = remember { mutableStateOf("00") }
+                        val currentS = remember { mutableStateOf("00") }
+                        LaunchedEffect(Unit) {
+                            while (true) {
+                                val cal = java.util.Calendar.getInstance()
+                                currentH.value = String.format("%02d", cal.get(java.util.Calendar.HOUR_OF_DAY))
+                                currentM.value = String.format("%02d", cal.get(java.util.Calendar.MINUTE))
+                                currentS.value = String.format("%02d", cal.get(java.util.Calendar.SECOND))
+                                delay(1000)
                             }
                         }
-                    } else {
-                        // BACK — Idle view (mirror to read correctly)
-                        Column(horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.fillMaxWidth().graphicsLayer { rotationY = 180f }
-                                .padding(top = 8.dp)) {
-                            Box(modifier = Modifier.width(220.dp).height(116.dp).drawBehind {
-                                drawArc(color = accentRed.copy(alpha = 0.08f),
-                                    startAngle = 180f, sweepAngle = 180f, useCenter = false,
-                                    topLeft = Offset(8.dp.toPx(), 8.dp.toPx()),
-                                    size = Size(size.width - 16.dp.toPx(), (size.height - 8.dp.toPx()) * 2),
-                                    style = Stroke(10.dp.toPx(), cap = StrokeCap.Round))
-                                drawArc(brush = Brush.linearGradient(
-                                    listOf(accentRed.copy(alpha = 0.3f), accentRed, accentOrg.copy(alpha = 0.3f))),
-                                    startAngle = 180f, sweepAngle = 180f * progress, useCenter = false,
-                                    topLeft = Offset(8.dp.toPx(), 8.dp.toPx()),
-                                    size = Size(size.width - 16.dp.toPx(), (size.height - 8.dp.toPx()) * 2),
-                                    style = Stroke(10.dp.toPx(), cap = StrokeCap.Round))
-                            }, contentAlignment = Alignment.BottomCenter) {
-                                Text(String.format("%02d:%02d", minutes, seconds),
-                                    fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Color.White,
-                                    modifier = Modifier.padding(bottom = 14.dp))
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("FOCUS", fontSize = 10.sp, color = Color(0xFFFCA5A5).copy(alpha = 0.4f),
-                                letterSpacing = 2.sp)
+
+                        Text("NOW", fontSize = 11.sp, letterSpacing = 4.sp,
+                            color = accentRed.copy(alpha = 0.6f), fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // HH:MM flip clock
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            FlipDigitPair(currentH.value, accentRed)
+                            Text(":", fontSize = 48.sp, fontWeight = FontWeight.ExtraBold,
+                                color = accentRed.copy(alpha = 0.5f),
+                                modifier = Modifier.padding(bottom = 8.dp))
+                            FlipDigitPair(currentM.value, accentRed)
                         }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Seconds — smaller flip digits below
+                        Row(horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            FlipDigit(currentS.value.getOrElse(0) { '0' }.toString(), accentRed.copy(alpha = 0.55f))
+                            FlipDigit(currentS.value.getOrElse(1) { '0' }.toString(), accentRed.copy(alpha = 0.55f))
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        val dayName = java.time.LocalDate.now().dayOfWeek.name
+                            .lowercase().replaceFirstChar { it.uppercase() }
+                        val dateStr = java.time.LocalDate.now().toString()
+                        Text("$dayName · $dateStr", fontSize = 11.sp,
+                            color = textDim.copy(alpha = 0.4f))
                     }
                 }
             }
 
-            item {
+            // ── Buttons — only when session view ──
+            if (isSessionView) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(onClick = { isRunning = !isRunning },
-                        modifier = Modifier.weight(1f).height(42.dp), shape = RoundedCornerShape(21.dp),
+                        modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(24.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isRunning) Color(0xFFF97316) else accentRed)) {
-                        Text(if (isRunning) "⏸ Pause" else "▶ Start", fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+                        Text(if (isRunning) "⏸  Pause" else "▶  Start",
+                            fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
                     }
                     OutlinedButton(onClick = { isRunning = false; currentTime = totalTime },
-                        modifier = Modifier.weight(1f).height(42.dp), shape = RoundedCornerShape(21.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.07f)),
+                        modifier = Modifier.weight(1f).height(48.dp), shape = RoundedCornerShape(24.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = textDim.copy(alpha = 0.6f))) {
-                        Text("↺ Reset", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Text("↺  Reset", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
 
-            item {
-                OutlinedButton(onClick = {
-                    isRunning = false; isWorkSession = true
-                    sessionCount = 0; totalTime = workTime; currentTime = workTime
-                }, modifier = Modifier.fillMaxWidth().height(38.dp), shape = RoundedCornerShape(19.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, accentRed.copy(alpha = 0.18f)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFCA5A5).copy(alpha = 0.65f))) {
-                    Text("⊖ Stop Focus Mode", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-
-            item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    listOf(
-                        Triple("🍅", "$sessionCount", "Sessions"),
-                        Triple("⏰", "${sessionCount * 25}m", "Focused"),
-                        Triple("🎯", "${4 - (sessionCount % 4)}", "To break")
-                    ).forEachIndexed { idx, (emoji, value, label) ->
-                        val bg = listOf(
-                            listOf(Color(0xFF1E2A4A), Color(0xFF162240)),
-                            listOf(Color(0xFF1E2228), Color(0xFF161920)),
-                            listOf(Color(0xFF2A1A2E), Color(0xFF1E1228))
-                        )[idx]
-                        Box(modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
-                            .background(Brush.linearGradient(bg))
-                            .padding(vertical = 11.dp, horizontal = 8.dp),
-                            contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text(emoji, fontSize = 17.sp)
-                                Text(value, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, color = Color.White)
-                                Text(label, fontSize = 8.sp, color = textDim.copy(alpha = 0.35f))
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(cardBg)
-                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 14.dp, vertical = 12.dp)) {
-                    Column {
-                        Text("🧠 Pomodoro Technique", fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp, color = Color(0xFFFCA5A5))
-                        Spacer(modifier = Modifier.height(7.dp))
-                        listOf("Work for 25 minutes", "Take a 5 minute break",
-                            "After 4 sessions → 15 min long break", "Repeat and stay focused! 💪"
-                        ).forEach { tip ->
-                            Row(modifier = Modifier.padding(bottom = 4.dp)) {
-                                Text("•  ", fontSize = 9.sp, color = accentRed.copy(alpha = 0.55f))
-                                Text(tip, fontSize = 9.sp, color = textDim.copy(alpha = 0.45f), lineHeight = 14.sp)
-                            }
-                        }
-                    }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(10.dp)) }
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
+
+// ── Flip Clock — MM:SS ──────────────────────────────────────────
+@Composable
+fun FlipClock(minutes: Int, seconds: Int, accentRed: Color) {
+    val minStr = String.format("%02d", minutes)
+    val secStr = String.format("%02d", seconds)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        FlipDigitPair(minStr, accentRed)
+        Text(":", fontSize = 48.sp, fontWeight = FontWeight.ExtraBold,
+            color = accentRed.copy(alpha = 0.5f),
+            modifier = Modifier.padding(bottom = 8.dp))
+        FlipDigitPair(secStr, accentRed)
+    }
+}
+
+// ── Single digit pair (e.g. "25") ──────────────────────────────
+@Composable
+fun FlipDigitPair(value: String, accentRed: Color) {
+    val d1 = value.getOrElse(0) { '0' }.toString()
+    val d2 = value.getOrElse(1) { '0' }.toString()
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        FlipDigit(d1, accentRed)
+        FlipDigit(d2, accentRed)
+    }
+}
+
+// ── Single flip digit tile ──────────────────────────────────────
+@Composable
+fun FlipDigit(digit: String, accentRed: Color) {
+    val cardColor  = Color(0xFF141520)
+    val borderClr  = Color(0xFF2A2A3A)
+
+    // Animate value change
+    var prevDigit by remember { mutableStateOf(digit) }
+    var isFlipping by remember { mutableStateOf(false) }
+    val flipAnim by animateFloatAsState(
+        targetValue = if (isFlipping) 90f else 0f,
+        animationSpec = tween(120, easing = LinearOutSlowInEasing),
+        finishedListener = { if (isFlipping) { prevDigit = digit; isFlipping = false } },
+        label = "digitFlip"
+    )
+
+    LaunchedEffect(digit) {
+        if (digit != prevDigit) isFlipping = true
+    }
+
+    val displayDigit = if (isFlipping && flipAnim >= 45f) digit else prevDigit
+
+    Box(
+        modifier = Modifier
+            .width(56.dp)
+            .height(80.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(cardColor)
+            .border(1.dp, borderClr, RoundedCornerShape(10.dp))
+            .graphicsLayer { rotationX = flipAnim },
+        contentAlignment = Alignment.Center
+    ) {
+        // Top/Bottom split line
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp)
+            .background(Color.Black.copy(alpha = 0.6f))
+            .align(Alignment.Center))
+
+        Text(
+            displayDigit,
+            fontSize = 52.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = Color.White,
+            letterSpacing = (-2).sp
+        )
+    }
+}
+
 
 // ═══════════════════════════════════════════════════════════════
 //  LIFE SCREEN — unchanged
@@ -1492,92 +1513,6 @@ fun LifeScreen() {
         containerColor = darkBg
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp)) {
-
-            item {
-                val quranManager     = remember { HabitManager(context) }
-                var quranPages       by remember { mutableStateOf(0) }
-                var alreadyReadToday by remember { mutableStateOf(false) }
-                var quranStreak      by remember { mutableStateOf(0) }
-                val maxPages = 20
-                LaunchedEffect(Unit) { quranManager.getHabitFlow("quran_read_today").collect { alreadyReadToday = it } }
-                LaunchedEffect(Unit) { quranManager.getStreakFlow("quran_read_today").collect { quranStreak = it } }
-                val ringPct = quranPages.toFloat() / maxPages
-
-                Box(modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp, top = 4.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF1A1535), Color(0xFF13102A), Color(0xFF0F0E20))))
-                    .border(1.dp, accentOrg.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
-                    .padding(14.dp)) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("📿", fontSize = 18.sp); Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text("Quran Tracker", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, color = accentGold)
-                                Text("Track your daily Quran reading", fontSize = 9.sp, color = accentGold.copy(alpha = 0.4f))
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Column {
-                                Row(verticalAlignment = Alignment.Bottom) {
-                                    Text("$quranPages", fontWeight = FontWeight.ExtraBold, fontSize = 28.sp,
-                                        color = if (alreadyReadToday) accentOrg else Color.White)
-                                    Text(" pages", fontSize = 14.sp, color = accentGold.copy(alpha = 0.5f),
-                                        modifier = Modifier.padding(bottom = 4.dp))
-                                }
-                                Text("🔥 $quranStreak day streak", fontSize = 10.sp, color = accentGold.copy(alpha = 0.6f))
-                                if (alreadyReadToday) Text("✅ Counted for today!", fontSize = 10.sp, color = accentGrn)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(modifier = Modifier.size(52.dp).drawBehind {
-                                    drawCircle(color = accentOrg.copy(alpha = 0.1f), style = Stroke(4.dp.toPx()))
-                                    drawArc(color = accentOrg, startAngle = -90f, sweepAngle = 360f * ringPct,
-                                        useCenter = false, style = Stroke(4.dp.toPx(), cap = StrokeCap.Round))
-                                }, contentAlignment = Alignment.Center) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("${(ringPct * 100).toInt()}%", fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 11.sp, color = accentOrg)
-                                        Text("done", fontSize = 6.sp, color = accentOrg.copy(alpha = 0.4f))
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Box(modifier = Modifier.size(34.dp).clip(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.07f))
-                                        .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
-                                        .clickable { if (quranPages > 0) quranPages-- },
-                                        contentAlignment = Alignment.Center) {
-                                        Text("−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.5f))
-                                    }
-                                    Box(modifier = Modifier.size(34.dp).clip(CircleShape)
-                                        .background(Brush.linearGradient(listOf(accentOrg, Color(0xFFF97316))))
-                                        .clickable { quranPages++ },
-                                        contentAlignment = Alignment.Center) {
-                                        Text("+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Box(modifier = Modifier.clip(RoundedCornerShape(20.dp))
-                                    .background(if (alreadyReadToday) accentGrn.copy(alpha = 0.1f) else accentGrn.copy(alpha = 0.08f))
-                                    .border(1.dp, if (alreadyReadToday) accentGrn.copy(alpha = 0.4f) else accentGrn.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
-                                    .clickable {
-                                        if (!alreadyReadToday && quranPages > 0) scope.launch {
-                                            quranManager.markHabitDone("quran_read_today")
-                                            quranManager.incrementStreak("quran_read_today", quranStreak)
-                                        }
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 5.dp),
-                                    contentAlignment = Alignment.Center) {
-                                    Text(if (alreadyReadToday) "✅ Done!" else "Mark Read",
-                                        fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = accentGrn)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
 
             item {
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
@@ -1645,45 +1580,103 @@ fun LifeScreen() {
     }
 
     if (showAddTodo) {
-        AlertDialog(onDismissRequest = { showAddTodo = false },
-            title = { Text("Add New Task") },
+        val dialogBg  = Color(0xFF111320)
+        val orgAccent = Color(0xFFFB923C)
+
+        AlertDialog(
+            onDismissRequest = { showAddTodo = false },
+            containerColor = dialogBg,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("✅", fontSize = 20.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("New Task", fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp, color = Color.White)
+                }
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(value = todoInput, onValueChange = { todoInput = it },
-                        label = { Text("Task title") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    Text("Set Reminder Time:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    // Task title
+                    OutlinedTextField(
+                        value = todoInput, onValueChange = { todoInput = it },
+                        label = { Text("What do you want to do?", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = orgAccent,
+                            focusedLabelColor = orgAccent,
+                            cursorColor = orgAccent,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                            unfocusedLabelColor = Color.Gray,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+
+                    // Time picker label
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("⏰", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Set Reminder", fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp, color = Color.White)
+                    }
+
+                    // Hour / Min / AM-PM row
+                    Row(modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        listOf(
-                            Triple("Hour", selectedHour.toString(), { delta: Int ->
-                                selectedHour = ((selectedHour - 1 + delta + 12) % 12) + 1 }),
-                            Triple("Min", String.format("%02d", selectedMinute), { delta: Int ->
-                                selectedMinute = (selectedMinute + delta * 5 + 60) % 60 })
-                        ).forEach { (label, value, onDelta) ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                                Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { onDelta(-1) }) { Text("▼", fontSize = 14.sp) }
-                                    Text(String.format("%02d", value.toInt()), fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                                    IconButton(onClick = { onDelta(1) }) { Text("▲", fontSize = 14.sp) }
-                                }
-                            }
-                        }
-                        Text(":", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                            Text("AM/PM", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                        // Hour picker
+                        TimePickerColumn(
+                            label = "Hour",
+                            value = selectedHour,
+                            onUp   = { selectedHour = if (selectedHour >= 12) 1 else selectedHour + 1 },
+                            onDown = { selectedHour = if (selectedHour <= 1) 12 else selectedHour - 1 },
+                            display = String.format("%02d", selectedHour),
+                            accent = orgAccent, modifier = Modifier.weight(1f)
+                        )
+
+                        Text(":", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
+                            color = orgAccent, modifier = Modifier.padding(bottom = 6.dp))
+
+                        // Minute picker — free +1/-1
+                        TimePickerColumn(
+                            label = "Min",
+                            value = selectedMinute,
+                            onUp   = { selectedMinute = (selectedMinute + 1) % 60 },
+                            onDown = { selectedMinute = if (selectedMinute <= 0) 59 else selectedMinute - 1 },
+                            display = String.format("%02d", selectedMinute),
+                            accent = orgAccent, modifier = Modifier.weight(1f)
+                        )
+
+                        // AM/PM toggle
+                        Column(horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)) {
+                            Text("AM/PM", fontSize = 10.sp, color = Color.Gray)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Button(onClick = { selectedAmPm = if (selectedAmPm == "AM") "PM" else "AM" },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                                Text(selectedAmPm, fontSize = 16.sp)
+                            Box(modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(orgAccent.copy(alpha = 0.15f))
+                                .border(1.dp, orgAccent.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                                .clickable { selectedAmPm = if (selectedAmPm == "AM") "PM" else "AM" }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.Center) {
+                                Text(selectedAmPm, fontSize = 16.sp,
+                                    fontWeight = FontWeight.ExtraBold, color = orgAccent)
                             }
                         }
                     }
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                        Row(modifier = Modifier.padding(12.dp).fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            Text("⏰ Reminder at: ${String.format("%02d", selectedHour)}:${String.format("%02d", selectedMinute)} $selectedAmPm",
-                                fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        }
+
+                    // Preview
+                    Box(modifier = Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(orgAccent.copy(alpha = 0.1f))
+                        .border(1.dp, orgAccent.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+                        .padding(12.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            "Reminder at ${String.format("%02d", selectedHour)}:${String.format("%02d", selectedMinute)} $selectedAmPm",
+                            fontSize = 13.sp, fontWeight = FontWeight.Bold, color = orgAccent
+                        )
                     }
                 }
             },
@@ -1695,9 +1688,17 @@ fun LifeScreen() {
                         scheduleReminder(context, todoInput, selectedHour, selectedMinute, selectedAmPm)
                         todoInput = ""; showAddTodo = false
                     }
-                }) { Text("Add Task") }
+                }, colors = ButtonDefaults.buttonColors(containerColor = orgAccent),
+                    shape = RoundedCornerShape(12.dp)) {
+                    Text("Add Task", fontWeight = FontWeight.Bold, color = Color.White)
+                }
             },
-            dismissButton = { TextButton(onClick = { showAddTodo = false }) { Text("Cancel") } })
+            dismissButton = {
+                TextButton(onClick = { showAddTodo = false }) {
+                    Text("Cancel", color = Color.Gray)
+                }
+            }
+        )
     }
 }
 
@@ -1821,24 +1822,55 @@ fun getYearlyUsage(context: Context): Long {
 fun getDayBreakdown(context: Context): List<Long> {
     val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
 
-    fun periodWithMinutes(startH: Int, startM: Int, endH: Int, endM: Int): Long {
-        val s = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, startH); set(Calendar.MINUTE, startM); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }
-        val e = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, endH); set(Calendar.MINUTE, endM); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }
-        val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, s.timeInMillis, e.timeInMillis)
-        return stats.sumOf { it.totalTimeInForeground }
+    // INTERVAL_DAILY দিয়ে সব period এ same value আসে কারণ Android
+    // daily bucket এ সারাদিনের usage দেয়।
+    // Fix: UsageEvents দিয়ে exact foreground time calculate করি।
+    fun getUsageForPeriod(startMs: Long, endMs: Long): Long {
+        var total = 0L
+        var lastForeground = -1L
+
+        try {
+            val events = usageStatsManager.queryEvents(startMs, endMs)
+            val event = android.app.usage.UsageEvents.Event()
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                when (event.eventType) {
+                    android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+                        lastForeground = event.timeStamp.coerceAtLeast(startMs)
+                    }
+                    android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+                        if (lastForeground > 0) {
+                            total += event.timeStamp.coerceAtMost(endMs) - lastForeground
+                            lastForeground = -1L
+                        }
+                    }
+                }
+            }
+            // যদি এখনো foreground এ থাকে
+            if (lastForeground > 0) {
+                total += minOf(System.currentTimeMillis(), endMs) - lastForeground
+            }
+        } catch (e: Exception) { }
+
+        return total
     }
 
+    fun timeMs(h: Int, m: Int): Long {
+        return Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    val now = System.currentTimeMillis()
+
     // Morning:   4:45 AM → 11:00 AM
-    val morning   = periodWithMinutes(4, 45, 11, 0)
+    val morning   = getUsageForPeriod(timeMs(4, 45), minOf(timeMs(11, 0), now))
     // Afternoon: 11:00 AM → 6:00 PM
-    val afternoon = periodWithMinutes(11, 0, 18, 0)
-    // Night:     6:00 PM → 11:59 PM  +  12:00 AM → 4:45 AM (আজকের শুরু)
-    val nightPart1 = periodWithMinutes(18, 0, 23, 59)  // সন্ধ্যা থেকে রাত
-    val nightPart2 = periodWithMinutes(0, 0, 4, 45)    // রাত থেকে ফজর
+    val afternoon = getUsageForPeriod(timeMs(11, 0), minOf(timeMs(18, 0), now))
+    // Night:     6:00 PM → now  +  12:00 AM → 4:45 AM
+    val nightPart1 = getUsageForPeriod(timeMs(18, 0), minOf(timeMs(23, 59), now))
+    val nightPart2 = getUsageForPeriod(timeMs(0, 0),  minOf(timeMs(4, 45),  now))
     val night = nightPart1 + nightPart2
 
     return listOf(morning, afternoon, night)
@@ -1890,4 +1922,45 @@ object CustomHabitStore {
         Triple("💻", "Code",    "code"),
         Triple("📝", "Journal", "journal")
     )
+}
+
+// ── Time Picker Column — up/down buttons ────────────────────────
+@Composable
+fun TimePickerColumn(
+    label: String,
+    value: Int,
+    onUp: () -> Unit,
+    onDown: () -> Unit,
+    display: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
+        Text(label, fontSize = 10.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(4.dp))
+        Box(modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+            .padding(4.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp))
+                    .background(accent.copy(alpha = 0.12f))
+                    .clickable { onUp() },
+                    contentAlignment = Alignment.Center) {
+                    Text("▲", fontSize = 12.sp, color = accent)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(display, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
+                    color = Color.White)
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(modifier = Modifier.size(32.dp).clip(RoundedCornerShape(8.dp))
+                    .background(accent.copy(alpha = 0.12f))
+                    .clickable { onDown() },
+                    contentAlignment = Alignment.Center) {
+                    Text("▼", fontSize = 12.sp, color = accent)
+                }
+            }
+        }
+    }
 }
