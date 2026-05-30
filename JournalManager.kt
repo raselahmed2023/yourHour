@@ -3,6 +3,7 @@ package com.example.yourhour
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
@@ -14,21 +15,23 @@ data class JournalEntry(
     val content: String
 )
 
+// FIX: আলাদা dataStore
+private val Context.journalDataStore by preferencesDataStore(name = "journal")
+
 class JournalManager(private val context: Context) {
 
     private val JOURNAL_KEY = stringPreferencesKey("journal_entries")
 
-    val entriesFlow: Flow<List<JournalEntry>> = context.dataStore.data.map { preferences ->
+    val entriesFlow: Flow<List<JournalEntry>> = context.journalDataStore.data.map { preferences ->
         val json = preferences[JOURNAL_KEY] ?: "[]"
         parseEntries(json)
     }
 
     suspend fun saveEntry(content: String) {
         val today = LocalDate.now().toString()
-        context.dataStore.edit { preferences ->
-            val json = preferences[JOURNAL_KEY] ?: "[]"
+        context.journalDataStore.edit { preferences ->
+            val json  = preferences[JOURNAL_KEY] ?: "[]"
             val array = JSONArray(json)
-            // আজকের entry আছে কিনা দেখো
             var found = false
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
@@ -59,7 +62,7 @@ class JournalManager(private val context: Context) {
             (0 until array.length()).map { i ->
                 val obj = array.getJSONObject(i)
                 JournalEntry(
-                    date = obj.getString("date"),
+                    date    = obj.getString("date"),
                     content = obj.getString("content")
                 )
             }.sortedByDescending { it.date }

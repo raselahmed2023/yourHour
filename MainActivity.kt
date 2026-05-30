@@ -403,6 +403,9 @@ fun StatsScreen(appUsageList: List<AppUsageInfo>, context: Context) {
     val prevMonthAvg  = if (prevMonthData.isNotEmpty()) prevMonthData.map { it.second }.average().toFloat() else 0f
     val monthDiffPct  = if (prevMonthAvg > 0) ((monthlyAvg - prevMonthAvg) / prevMonthAvg * 100).toInt() else 0
 
+    // Yesterday hours
+    val yesterdayHours = remember { getYesterdayUsage(context) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -465,36 +468,47 @@ fun StatsScreen(appUsageList: List<AppUsageInfo>, context: Context) {
                     "Last Week", prevWeekAvg, weekDiffPct, accentPurple, cardBg)
             }
 
-            // Card 2: Today vs Week Average
+            // Card 2: Today vs Yesterday
             item {
                 val todayH = TimeUnit.MILLISECONDS.toHours(totalTime).toFloat()
-                val todayVsWeekPct = if (weeklyAvg > 0) ((todayH - weeklyAvg) / weeklyAvg * 100).toInt() else 0
+                val diffPct = if (yesterdayHours > 0)
+                    ((todayH - yesterdayHours) / yesterdayHours * 100).toInt() else 0
+                val isMore = todayH > yesterdayHours
 
                 Card(modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = cardBg),
                     shape = RoundedCornerShape(20.dp)) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        Text("📊 Today vs Week Avg", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                        Text("📊 Today vs Yesterday", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
                         Spacer(modifier = Modifier.height(14.dp))
                         Row(modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically) {
-                            StatBarColumn("Today", todayH, maxOf(todayH, weeklyAvg, 1f),
-                                if (todayH > weeklyAvg) accentRed else accentGreen)
+                            StatBarColumn("Today", todayH, maxOf(todayH, yesterdayHours, 1f),
+                                if (isMore) accentRed else accentGreen)
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                val isOver = todayH > weeklyAvg
                                 Box(modifier = Modifier
-                                    .background(if (isOver) accentRed.copy(0.15f) else accentGreen.copy(0.15f),
+                                    .background(if (isMore) accentRed.copy(0.15f) else accentGreen.copy(0.15f),
                                         RoundedCornerShape(20.dp))
                                     .padding(horizontal = 10.dp, vertical = 6.dp)) {
-                                    Text(if (isOver) "▲ ${todayVsWeekPct}%" else "▼ ${-todayVsWeekPct}%",
+                                    Text(
+                                        if (yesterdayHours == 0f) "No data"
+                                        else if (isMore) "▲ ${diffPct}%" else "▼ ${-diffPct}%",
                                         fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                                        color = if (isOver) accentRed else accentGreen)
+                                        color = if (isMore) accentRed else accentGreen
+                                    )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text("vs week avg", fontSize = 9.sp, color = Color.Gray)
+                                Text("vs yesterday", fontSize = 9.sp, color = Color.Gray)
                             }
-                            StatBarColumn("Week Avg", weeklyAvg, maxOf(todayH, weeklyAvg, 1f), accentPurple)
+                            StatBarColumn("Yesterday", yesterdayHours, maxOf(todayH, yesterdayHours, 1f), accentPurple)
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Today: ${todayH.toInt()}h ${((todayH % 1) * 60).toInt()}m",
+                                fontSize = 11.sp, color = if (isMore) accentRed else accentGreen)
+                            Text("Yesterday: ${yesterdayHours.toInt()}h ${((yesterdayHours % 1) * 60).toInt()}m",
+                                fontSize = 11.sp, color = Color.Gray)
                         }
                     }
                 }
@@ -540,9 +554,9 @@ fun StatsScreen(appUsageList: List<AppUsageInfo>, context: Context) {
                         Text("Today's Breakdown", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            DarkBreakdownItem("🌅", "Morning", breakdown[0], accentPurple)
-                            DarkBreakdownItem("☀️", "Afternoon", breakdown[1], accentRed)
-                            DarkBreakdownItem("🌙", "Evening", breakdown[2], accentGreen)
+                            DarkBreakdownItem("🌅", "Morning", "4:45-11am", breakdown[0], accentPurple)
+                            DarkBreakdownItem("☀️", "Afternoon", "11am-6pm", breakdown[1], accentRed)
+                            DarkBreakdownItem("🌙", "Night", "6pm-4:45am", breakdown[2], accentGreen)
                         }
                     }
                 }
@@ -607,13 +621,16 @@ fun StatBarColumn(label: String, hours: Float, maxHours: Float, color: Color) {
 }
 
 @Composable
-fun DarkBreakdownItem(emoji: String, label: String, millis: Long, color: Color) {
+fun DarkBreakdownItem(emoji: String, label: String, timeRange: String, millis: Long, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(emoji, fontSize = 24.sp)
+        Text(emoji, fontSize = 22.sp)
+        Spacer(modifier = Modifier.height(3.dp))
+        // Bold label (Morning / Afternoon / Night)
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        // Small time range below
+        Text(timeRange, fontSize = 8.sp, color = Color.Gray)
         Spacer(modifier = Modifier.height(4.dp))
-        Text(label, fontSize = 11.sp, color = Color.Gray)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(formatTime(millis), fontWeight = FontWeight.Bold, fontSize = 18.sp, color = color)
+        Text(formatTime(millis), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = color)
     }
 }
 
@@ -641,14 +658,11 @@ fun HabitsScreen() {
         )
     }
 
+    // FIX: Load from SharedPreferences so habits persist across app restarts
     val customHabits = remember {
-        mutableStateListOf(
-            Triple("🕌", "Pray",    "prayer"),
-            Triple("🚶", "Walk",    "walk"),
-            Triple("📖", "Read",    "read"),
-            Triple("💻", "Code",    "code"),
-            Triple("📝", "Journal", "journal")
-        )
+        mutableStateListOf<Triple<String, String, String>>().also { list ->
+            list.addAll(CustomHabitStore.load(context))
+        }
     }
 
     val prayers = listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")
@@ -767,6 +781,7 @@ fun HabitsScreen() {
             items(customHabits) { (emoji, name, key) ->
                 LuxuryHabitCard(emoji, name, key, habitManager, goldColor, cardBg, true) {
                     customHabits.removeIf { it.third == key }
+                    CustomHabitStore.save(context, customHabits.toList())
                 }
             }
 
@@ -804,6 +819,7 @@ fun HabitsScreen() {
                     if (newHabitName.isNotBlank()) {
                         val key = "custom_${newHabitName.lowercase().replace(" ", "_")}_${System.currentTimeMillis()}"
                         customHabits.add(Triple(newHabitEmoji, newHabitName, key))
+                        CustomHabitStore.save(context, customHabits.toList())
                         newHabitName = ""; newHabitEmoji = "⭐"; showAddDialog = false
                     }
                 }) { Text("Add") }
@@ -1804,11 +1820,74 @@ fun getYearlyUsage(context: Context): Long {
 
 fun getDayBreakdown(context: Context): List<Long> {
     val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-    fun period(startH: Int, endH: Int): Long {
-        val s = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, startH); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }
-        val e = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, endH); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }
-        return usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, s.timeInMillis, e.timeInMillis)
-            .sumOf { it.totalTimeInForeground }
+
+    fun periodWithMinutes(startH: Int, startM: Int, endH: Int, endM: Int): Long {
+        val s = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, startH); set(Calendar.MINUTE, startM); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        val e = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, endH); set(Calendar.MINUTE, endM); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, s.timeInMillis, e.timeInMillis)
+        return stats.sumOf { it.totalTimeInForeground }
     }
-    return listOf(period(5, 12), period(12, 17), period(17, 23))
+
+    // Morning:   4:45 AM → 11:00 AM
+    val morning   = periodWithMinutes(4, 45, 11, 0)
+    // Afternoon: 11:00 AM → 6:00 PM
+    val afternoon = periodWithMinutes(11, 0, 18, 0)
+    // Night:     6:00 PM → 11:59 PM  +  12:00 AM → 4:45 AM (আজকের শুরু)
+    val nightPart1 = periodWithMinutes(18, 0, 23, 59)  // সন্ধ্যা থেকে রাত
+    val nightPart2 = periodWithMinutes(0, 0, 4, 45)    // রাত থেকে ফজর
+    val night = nightPart1 + nightPart2
+
+    return listOf(morning, afternoon, night)
+}
+
+fun getYesterdayUsage(context: Context): Float {
+    val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+    val start = Calendar.getInstance().apply {
+        add(Calendar.DAY_OF_YEAR, -1)
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }
+    val end = Calendar.getInstance().apply {
+        add(Calendar.DAY_OF_YEAR, -1)
+        set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
+    }
+    val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start.timeInMillis, end.timeInMillis)
+    return stats.sumOf { it.totalTimeInForeground }.toFloat() / (1000 * 60 * 60)
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CUSTOM HABIT PERSISTENCE — SharedPreferences
+// ═══════════════════════════════════════════════════════════════
+
+object CustomHabitStore {
+    private const val PREF_NAME = "custom_habits_prefs"
+    private const val KEY_HABITS = "habit_list"
+
+    // Format: "emoji|name|key" per line
+    fun save(context: Context, habits: List<Triple<String, String, String>>) {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        val encoded = habits.joinToString("\n") { "${it.first}|${it.second}|${it.third}" }
+        prefs.edit().putString(KEY_HABITS, encoded).apply()
+    }
+
+    fun load(context: Context): List<Triple<String, String, String>> {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_HABITS, null) ?: return defaultHabits()
+        if (raw.isBlank()) return defaultHabits()
+        return raw.lines().mapNotNull { line ->
+            val parts = line.split("|")
+            if (parts.size == 3) Triple(parts[0], parts[1], parts[2]) else null
+        }
+    }
+
+    fun defaultHabits() = listOf(
+        Triple("🕌", "Pray",    "prayer"),
+        Triple("🚶", "Walk",    "walk"),
+        Triple("📖", "Read",    "read"),
+        Triple("💻", "Code",    "code"),
+        Triple("📝", "Journal", "journal")
+    )
 }
